@@ -1,0 +1,356 @@
+% =========================================================
+% ECG_Analyzer
+% =========================================================
+clear; clc; close all;
+
+%% ================= LOAD DATA =================
+[fname, fpath] = uigetfile({'*.csv'}, 'Pilih File ECG');
+if isequal(fname,0), error('File tidak dipilih'); end
+
+fid  = fopen(fullfile(fpath,fname));
+raw  = textscan(fid, '%s', 'Delimiter', '\n');
+fclose(fid);
+
+lines = raw{1}(2:end);   % buang header
+N = length(lines);
+
+time_str = strings(N,1);
+ecg_orig = zeros(N,1);
+hr_raw   = zeros(N,1);
+rr_raw   = zeros(N,1);
+edr_raw  = zeros(N,1);
+
+for i = 1:N
+    p = split(lines{i}, ',');
+    if length(p) >= 5
+        time_str(i) = p(1);
+        ecg_orig(i) = str2double(p(2));
+        hr_raw(i)   = str2double(p(3));
+        rr_raw(i)   = str2double(p(4));
+        edr_raw(i)  = str2double(p(5));
+    end
+end
+
+ts_raw   = datetime(time_str, 'InputFormat', 'HH:mm:ss.SSS');
+valid    = ~isnan(ecg_orig);
+ecg_orig = ecg_orig(valid);
+ts_raw   = ts_raw(valid);
+fs_orig  = hitungFs(ts_raw);
+fprintf('Fs asli = %.1f Hz\n', fs_orig);
+
+%% ================= RESAMPLE ke 250 Hz =================
+fs  = 250;
+dur = (length(ecg_orig)-1) / fs_orig;
+t   = (0 : 1/fs : dur)';
+ecg = interp1(linspace(0,dur,length(ecg_orig)), ecg_orig, t, 'spline');
+ecg = ecg - mean(ecg);
+N   = length(ecg);
+fprintf('Resampled: %d Hz | %d sampel\n', fs, N);
+
+%% ================= FILTER ECG =================
+% [UBAH 1] Sinkronkan dengan Arduino v7:
+% Notch 4 orde, HPF 2 orde 0.5Hz, BPF 6 orde 5-15Hz
+% Sama persis dengan koefisien di Arduino
+[b_notch, a_notch] = butter(4, [48 52]/(fs/2), 'stop');
+[b_hpf,   a_hpf]   = butter(2, 0.5/(fs/2),     'high');
+[b_bp,    a_bp]     = butter(6, [5 15]/(fs/2),  'bandpass');
+
+ecg_f  = filtfilt(b_notch, a_notch, ecg);
+ecg_f  = filtfilt(b_hpf,   a_hpf,   ecg_f);
+ecg_bp = filtfilt(b_bp,    a_bp,     ecg_f);
+
+%% ================= PAN-TOMPKINS =================
+% [UBAH 2] MWI = 28 (sinkron dengan Arduino MWI_LEN=28)
+% Sebelum: MWI_N = 44 (tidak sinkron)
+MWI_N   = 28;
+ecg_d   = filter((fs/8)*[-1 -2 0 2 1], 1, ecg_bp);
+ecg_mwi = filter(ones(1,MWI_N)/MWI_N,  1, ecg_d.^2);
+
+d = floor((MWI_N-1)/2);
+ecg_mwi = [ecg_mwi(d+1:end); zeros(d,1)];
+
+SPKI = max(ecg_mwi)*0.25;
+NPKI = max(ecg_mwi)*0.05;
+THR  = NPKI + 0.25*(SPKI-NPKI);
+
+% [UBAH 3] Refractory adaptif sinkron dengan adaptiveRefr() Arduino
+% Sebelum: refr tetap 0.2*fs = 50 samp
+% Sesudah: dihitung ulang setiap R-peak
+refr_default = round(0.3*fs);
+r_peaks      = [];
+hr_est       = 0;
+
+for i = 20:N-20
+    if ecg_mwi(i) > ecg_mwi(i-1) && ecg_mwi(i) >= ecg_mwi(i+1)
+        if ecg_mwi(i) >= THR
+            refr = adaptiveRefrMATLAB(hr_est, fs);
+            if isempty(r_peaks) || (i - r_peaks(end)) > refr
+                [~,ix]  = max(abs(ecg_bp(i-10:i+10)));
+                rpk     = i - 10 + ix - 1;
+                r_peaks(end+1) = rpk;
+                SPKI = 0.125*ecg_mwi(i) + 0.875*SPKI;
+                if length(r_peaks) >= 2
+                    rri_last = (r_peaks(end)-r_peaks(end-1))/fs;
+                    if rri_last > 0.17 && rri_last < 4.0
+                        hr_est = 60/rri_last;
+                    end
+                end
+            end
+        else
+            NPKI = 0.125*ecg_mwi(i) + 0.875*NPKI;
+        end
+        THR = NPKI + 0.35*(SPKI-NPKI);  % [UBAH 3] 0.25→0.35 sinkron Arduino
+    end
+end
+r_peaks = unique(r_peaks);
+
+%% ================= HR dengan outlier rejection =================
+% [UBAH 4] Replika logik Arduino: median RRI buffer + outlier filter
+rr_s  = diff(r_peaks) / fs;
+hr_t  = 60 ./ rr_s;
+
+% Outlier: buang jika RRI > 2× median atau < 0.5× median
+rri_med_all = movmedian(rr_s, 5);
+valid_hr    = hr_t > 14 & hr_t < 352 & ...
+              rr_s < 2.0*rri_med_all & rr_s > 0.5*rri_med_all;
+
+hr_clean = hr_t(valid_hr);
+t_hr     = t(r_peaks(2:end));
+t_hr     = t_hr(valid_hr);
+
+fprintf('HR = %.2f ± %.2f BPM\n', mean(hr_clean), std(hr_clean));
+
+%% ================= EDR-AM — replika Arduino =================
+% [UBAH 5] Gunakan ecg_bp (bukan ecg_nh) agar sinkron dengan Arduino
+% Arduino menggunakan |bp| × (1/bpf_gain) sebagai amplitudo R-peak
+r_amp = abs(ecg_bp(r_peaks));
+
+% Interpolasi envelope
+amp_interp = interp1(t(r_peaks), r_amp, t, 'pchip');
+amp_interp = fillmissing(amp_interp, 'nearest');
+
+% Replika rp_env asymmetric tracker Arduino
+% Sebelum: langsung filtfilt → tidak mereplikasi envelope tracker
+rp_env_sig = zeros(size(amp_interp));
+env_val = amp_interp(1);
+for i = 1:length(amp_interp)
+    if amp_interp(i) > env_val
+        env_val = 0.65*amp_interp(i) + 0.35*env_val;
+    else
+        env_val = 0.015*amp_interp(i) + 0.985*env_val;
+    end
+    rp_env_sig(i) = env_val;
+end
+
+%% ================= FILTER RESPIRASI =================
+% [UBAH 6] Sinkronkan dengan Arduino:
+% HPF 1 orde 0.05Hz (sama dengan resp_hp_sos Arduino)
+% LPF 2 orde 1.0Hz  (sama dengan resp_lp_sos Arduino)
+[b_resp_hp, a_resp_hp] = butter(2, 0.05/(fs/2), 'high');
+[b_resp_lp, a_resp_lp] = butter(4, 1.00/(fs/2), 'low');
+
+env_scaled = rp_env_sig * 100;
+resp       = filtfilt(b_resp_hp, a_resp_hp, env_scaled);
+resp       = filtfilt(b_resp_lp, a_resp_lp, resp);
+
+% Normalisasi sinkron Arduino: zero-center + range normalization
+% [UBAH 6] floor range = 0.40 sinkron dengan norm_range floor Arduino v7
+resp_dc   = mean(resp);
+resp_zc   = resp - resp_dc;
+resp_range = max(resp_zc) - min(resp_zc);
+if resp_range < 0.40, resp_range = 0.40; end
+resp_n    = resp_zc / (0.5 * resp_range);
+resp_n    = max(-1, min(1, resp_n));
+
+%% ================= BREATH HOLD DETECTION =================
+% [UBAH 7] Sinkron dengan Arduino: variance window 1 detik
+% Sebelum: movvar 3 detik, threshold 0.0005
+% Sesudah: movvar 1 detik (HOLD_WIN_LEN=250 samp), threshold 0.008
+win_hold  = round(1.0 * fs);
+var_signal = movvar(resp_n, win_hold);
+is_hold    = var_signal < 0.008;
+
+fprintf('Breath hold terdeteksi: %.1f%% dari rekaman\n', 100*mean(is_hold));
+
+%% ================= RR DETECTION — replika Arduino =================
+% [UBAH 8] Ganti findpeaks dengan threshold adaptif sinkron Arduino
+% Sebelum: findpeaks MinPeakDistance=0.67, MinPeakProminence=0.08
+% Sesudah: peak detector + threshold dinamis identik dengan Arduino C
+
+rr_bpm_arr = [];
+rr_times   = [];
+
+SPKI_rr  = 0.5;
+NPKI_rr  = 0.05;
+THR_rr   = NPKI_rr + 0.25*(SPKI_rr - NPKI_rr);
+peak_max = 0.5;
+last_pk  = 0;
+rr_bpm_r = 0;
+
+prev_prev = 0;
+prev_val  = 0;
+
+for i = 3:length(resp_n)-1
+    ev = resp_n(i);
+
+    % local max: prev_prev < prev > curr
+    if prev_prev < prev_val && prev_val > ev && prev_val > THR_rr
+
+        % refractory: min 0.50 detik (sinkron UBAH 7 Arduino)
+        if (i - last_pk) > round(0.50 * fs)
+
+            if last_pk > 0 && ~is_hold(i)  % skip saat breath hold
+                period = (i - last_pk) / fs;
+                if period >= 0.50 && period <= 20.0
+                    rr_new = 60.0 / period;
+
+                    % alpha adaptif sinkron Arduino UBAH 8
+                    if rr_bpm_r < 1.0
+                        rr_bpm_r = rr_new;
+                    else
+                        rr_delta = abs(rr_new - rr_bpm_r);
+                        if     rr_delta > 15,  a = 0.60;
+                        elseif rr_delta > 8,   a = 0.35;
+                        elseif rr_delta > 3,   a = 0.20;
+                        else,                  a = 0.10;
+                        end
+                        rr_bpm_r = a*rr_new + (1-a)*rr_bpm_r;
+                    end
+                    rr_bpm_arr(end+1) = rr_bpm_r;
+                    rr_times(end+1)   = t(i);
+                end
+            end
+
+            last_pk = i;
+
+            % update threshold sinkron Arduino
+            if prev_val > peak_max
+                peak_max = prev_val;
+            else
+                peak_max = 0.998*peak_max + 0.002*prev_val;
+            end
+            THR_rr = 0.45 * peak_max;
+            if THR_rr < 0.25, THR_rr = 0.25; end  % UBAH 9: floor 0.25
+        end
+    end
+
+    prev_prev = prev_val;
+    prev_val  = ev;
+end
+
+if ~isempty(rr_bpm_arr)
+    valid_rr = rr_bpm_arr > 3 & rr_bpm_arr < 90;
+    mean_rr  = mean(rr_bpm_arr(valid_rr));
+    fprintf('RR = %.2f BPM\n', mean_rr);
+else
+    mean_rr = NaN;
+    fprintf('RR: tidak terdeteksi\n');
+end
+
+
+%% ================= VISUALISASI =================
+figure('Name','ECG Analyzer v2');
+
+subplot(4,1,1)
+plot(t_hr, hr_clean, 'r', 'LineWidth', 1.5)
+grid on
+ylabel('BPM')
+title(sprintf('Heart Rate = %.1f BPM (clean)', mean(hr_clean)))
+
+subplot(4,1,2)
+plot(t, resp_n, 'b', 'LineWidth', 1.5); hold on
+if ~isempty(rr_times)
+    plot(rr_times, interp1(t, resp_n, rr_times, 'nearest'), ...
+         'go', 'MarkerFaceColor', 'g', 'MarkerSize', 6)
+end
+% shade breath hold
+hold_regions = find(diff([0;is_hold;0]));
+for k = 1:2:length(hold_regions)-1
+    x1 = t(hold_regions(k));
+    x2 = t(min(hold_regions(k+1), length(t)));
+    patch([x1 x2 x2 x1], [-1.1 -1.1 1.1 1.1], ...
+          [1 0.8 0.8], 'FaceAlpha', 0.3, 'EdgeColor', 'none')
+end
+grid on
+ylabel('EDR norm')
+title(sprintf('Respiratory Rate = %.1f BPM  (merah = breath hold)', mean_rr))
+legend('Resp','Peaks','Location','best')
+ylim([-1.2 1.2])
+
+subplot(4,1,3)
+plot(t, var_signal, 'k', 'LineWidth', 1)
+yline(0.008, 'r--', 'Threshold 0.008', 'LineWidth', 1.2)
+grid on
+ylabel('Variance')
+title('Breath hold detection (variance EDR 1 detik)')
+
+subplot(4,1,4)
+plot(t, resp_n, 'b', 'LineWidth', 1); hold on
+plot(t_hr, hr_clean/max(hr_clean), 'r--', 'LineWidth', 1)
+grid on
+xlabel('Time (s)')
+legend('EDR resp','HR norm','Location','best')
+title('Overview: EDR + HR')
+
+figure('Name','Data dari alat vs MATLAB');
+subplot(4,1,1); plot(ecg_orig); title('ECG RAW')
+subplot(4,1,2); plot(hr_raw);   title('HR dari alat')
+subplot(4,1,3); plot(rr_raw);   title('RR dari alat')
+subplot(4,1,4); plot(edr_raw);  title('EDR dari alat')
+
+%% ================= EXPORT SOS ke header Arduino =================
+% [UBAH 10] Auto-generate file .h — tidak perlu copy-paste manual
+exportSOSHeader('ecg_filters_v7.h', ...
+    b_notch, a_notch, b_hpf, a_hpf, b_bp, a_bp, ...
+    b_resp_hp, a_resp_hp, b_resp_lp, a_resp_lp);
+
+fprintf('\nSOS header ditulis ke ecg_filters_v7.h\n');
+
+%% ================= FUNGSI =================
+
+function fs_out = hitungFs(ts_raw)
+    fs_out = 250;
+    try
+        dt = seconds(diff(datetime(ts_raw)));
+        fs_out = 1/mean(dt);
+    catch; end
+end
+
+function refr = adaptiveRefrMATLAB(hr_est, fs)
+    if hr_est < 1
+        refr = 75;
+        return;
+    end
+    rri_samp = (60/hr_est) * fs;
+    refr = round(rri_samp * 0.60);
+    if refr > 100, refr = 100; end
+    if refr <  40, refr =  40; end
+end
+
+function exportSOSHeader(fname, b_notch, a_notch, b_hpf, a_hpf, ...
+                          b_bp, a_bp, b_resp_hp, a_resp_hp, b_resp_lp, a_resp_lp)
+    fid = fopen(fname, 'w');
+    fprintf(fid, '// Auto-generated by ECG_Analyzer_v2.m\n');
+    fprintf(fid, '// Jangan edit manual — regenerasi dari MATLAB\n\n');
+    writeSOS(fid, 'NOTCH',   b_notch,   a_notch);
+    writeSOS(fid, 'HPF',     b_hpf,     a_hpf);
+    writeSOS(fid, 'BPF',     b_bp,      a_bp);
+    writeSOS(fid, 'RESP_HP', b_resp_hp, a_resp_hp);
+    writeSOS(fid, 'RESP_LP', b_resp_lp, a_resp_lp);
+    fclose(fid);
+end
+
+function writeSOS(fid, prefix, b, a)
+    [sos, g] = tf2sos(b, a);
+    stages   = size(sos, 1);
+    fprintf(fid, '#define %s_STAGES %d\n', prefix, stages);
+    fprintf(fid, 'const float %s_sos[%s_STAGES][5] = {\n', lower(prefix), prefix);
+    for i = 1:stages
+        sep = ',';
+        if i == stages, sep = ''; end
+        fprintf(fid, '  {%+.13ef,%+.13ef,%+.13ef,%+.13ef,%+.13ef}%s\n', ...
+            sos(i,1), sos(i,2), sos(i,3), sos(i,5), sos(i,6), sep);
+    end
+    fprintf(fid, '};\n');
+    fprintf(fid, 'const float %s_gain = %+.13ef;\n\n', lower(prefix), g);
+end
