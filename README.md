@@ -1,10 +1,21 @@
-![alt text](https://github.com/lonelyloli/Portable-Multi-Parameter-Patient-Monitor-Based-ON-ESP-NOW/blob/main/Documentation/Design%201.png)
-![alt text](https://github.com/lonelyloli/Portable-Multi-Parameter-Patient-Monitor-Based-ON-ESP-NOW/blob/main/Documentation/Design%202.png)
+<p align="center">
+  <img src="https://github.com/lonelyloli/Portable-Multi-Parameter-Patient-Monitor-Based-ON-ESP-NOW/blob/main/Documentation/Design%201.png" width="46%" />
+  <img src="https://github.com/lonelyloli/Portable-Multi-Parameter-Patient-Monitor-Based-ON-ESP-NOW/blob/main/Documentation/Design%202.png" width="46%" />
+</p>
+<p align="center"><i>The completed Portable Multi-Parameter Patient Monitor — master unit with Nextion touchscreen (left) and the full assembled system with ECG cable, SpO₂ finger clip, and NIBP cuff (right).</i></p>
 
+<h1 align="center">Portable Multi-Parameter Patient Monitor Based on ESP-NOW</h1>
 
-# Portable Multi-Parameter Patient Monitor Based on ESP-NOW
+<p align="center">
+A low-cost, open-hardware, portable patient monitor that simultaneously acquires <b>three-lead ECG</b>, <b>non-invasive blood pressure (NIBP)</b>, <b>SpO₂</b>, <b>skin temperature</b>, <b>heart rate (HR)</b>, and <b>respiration rate (RR)</b> — all coordinated wirelessly through Espressif's <b>ESP-NOW</b> protocol, without requiring a Wi-Fi access point or patient-side cabling between sensing and display units.
+</p>
 
-A low-cost, open-hardware, portable patient monitor that simultaneously acquires **three-lead ECG**, **non-invasive blood pressure (NIBP)**, **SpO₂**, **skin temperature**, **heart rate (HR)**, and **respiration rate (RR)** — all coordinated wirelessly through Espressif's **ESP-NOW** protocol, without requiring a Wi-Fi access point or patient-side cabling between sensing and display units.
+<p align="center">
+<img alt="License: CC BY-SA 4.0" src="https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg">
+<img alt="Platform" src="https://img.shields.io/badge/Platform-ESP32%20%2F%20ESP32--S3-blue.svg">
+<img alt="Protocol" src="https://img.shields.io/badge/Wireless-ESP--NOW-orange.svg">
+<img alt="Cost" src="https://img.shields.io/badge/Hardware%20Cost-%24510.18-brightgreen.svg">
+</p>
 
 This repository contains the complete hardware design (schematics/PCB), firmware (Arduino/ESP32), 3D-printed enclosure files, Nextion HMI project, MATLAB validation scripts, and the companion Visual Basic data-visualization application described in the accompanying HardwareX-style article.
 
@@ -107,6 +118,14 @@ The system uses a **two-tier, distributed sensor-network architecture**:
 
 Each ESP32 unit registers its communication peer's MAC address before any data exchange takes place, using a bidirectional registration scheme (master knows every slave's address; every slave knows the master's address).
 
+### Inside the Enclosures
+
+<p align="center">
+  <img src="https://github.com/lonelyloli/Portable-Multi-Parameter-Patient-Monitor-Based-ON-ESP-NOW/blob/main/Documentation/Inside%20Master.png" width="48%" />
+  <img src="https://github.com/lonelyloli/Portable-Multi-Parameter-Patient-Monitor-Based-ON-ESP-NOW/blob/main/Documentation/Inside%20Slave.png" width="48%" />
+</p>
+<p align="center"><i>Left: inside the master enclosure — ESP32 master board, Nextion display connector, and alarm/power circuitry. Right: inside a slave enclosure — analog front-end PCB, ESP32/ESP32-S3 slave board, and dedicated battery pack.</i></p>
+
 ---
 
 ## Hardware Specifications
@@ -178,7 +197,7 @@ Each ESP32 unit registers its communication peer's MAC address before any data e
 
 ## Firmware
 
-All firmware was developed in the **Arduino IDE (v2.3.6)** with the ESP32 core, organized into **seven sketches**:
+All firmware was developed in the **Arduino IDE (v2.3.6)** with the ESP32 core, organized into **eight sketches**:
 
 | Sketch | Runs on | Role |
 |---|---|---|
@@ -187,8 +206,8 @@ All firmware was developed in the **Arduino IDE (v2.3.6)** with the ESP32 core, 
 | `Slave_ECG3Lead.ino` | ECG slave | Lead I/II acquisition, filtering, Lead III reconstruction, lead-fail detection |
 | `Slave_HR_RR.ino` | HR/RR slave | Pan-Tompkins QRS detection + EDR-AM respiration extraction |
 | `Slave_NIBP_Core.ino` | NIBP slave | Oscillometric pump/valve control state machine |
-| `Slave_NIBP_Send.ino` | NIBP slave | Send to Master machine |
-| `Slave_SKINTEMP_Sent` | SpO₂/Temp/BMS slave | DS18B20 temperature acquisition |
+| `Slave_NIBP_Send.ino` | NIBP/Korotkoff slave | Handles Korotkoff-sound detection and forwards pressure/result data to the master |
+| `Slave_SKINTEMP_Sent` | SpO₂/Temp/BMS slave | DS18B20 temperature acquisition and BMS reporting |
 | `Slave_SPO2_Core.ino` | SpO₂/Temp/BMS slave | Red/IR LED timing, demultiplexing, ratio-of-ratios SpO₂ computation |
 
 Key libraries: `esp_now.h`, `WiFi.h` (station mode, `WIFI_STA`), `freertos/task.h` & `freertos/queue.h` (ECG/HR-RR), `HardwareSerial` (NIBP/Korotkoff inter-slave UART + SD-card library on the gateway), `OneWire` and `DallasTemperature` (SpO₂/Temp/BMS branch).
@@ -203,13 +222,26 @@ Key libraries: `esp_now.h`, `WiFi.h` (station mode, `WIFI_STA`), `freertos/task.
 - **Cloud sync (optional, offline-tolerant):** records are forwarded to a Google Sheets-based spreadsheet logger via Apps Script/HTTPS, reviewable from a smartphone browser.
 - **Companion desktop app:** a **Visual Basic** application retrieves logged sessions via the Sheets API and reconstructs ECG, SpO₂ (PPG), and respiration waveforms as time-aligned graphical plots, with zoom, pan, and export (PNG/PDF/CSV) — all without requiring an active connection to the physical hardware.
 
+<p align="center">
+  <img src="https://github.com/lonelyloli/Portable-Multi-Parameter-Patient-Monitor-Based-ON-ESP-NOW/blob/main/Documentation/GUI%20Data%20Logger.png" width="75%" />
+</p>
+<p align="center"><i>Companion Visual Basic data-logger application, showing a retrieved recording session reconstructed as time-aligned graphical waveforms with zoom, pan, and export functionality.</i></p>
+
 ---
 
 ## Repository Structure / Design Files
 
+```
+├── Code/                 # All Arduino (.ino) firmware sketches — master and slave
+├── Documentation/         # Hardware photos, GUI screenshots, and reference images
+├── Nextion HMI/           # Nextion Editor project (.HMI) for the master touchscreen
+├── Schematic/              # Eagle schematic and PCB (.sch / .brd) files
+└── README.md
+```
+
 | File | Type | License |
 |---|---|---|
-| `PastMontFIX.sch` | Eagle schematic | CC BY-SA 4.0 |
+| `PastMontFIX.sch` / `PastMontFIX.brd` | Eagle schematic & board | CC BY-SA 4.0 |
 | `Master_Core.ino` | Arduino firmware | CC BY-SA 4.0 |
 | `Master_Datalogger.ino` | Arduino firmware | CC BY-SA 4.0 |
 | `Slave_ECG3Lead.ino` | Arduino firmware | CC BY-SA 4.0 |
@@ -217,7 +249,7 @@ Key libraries: `esp_now.h`, `WiFi.h` (station mode, `WIFI_STA`), `freertos/task.
 | `Slave_NIBP_Core.ino` | Arduino firmware | CC BY-SA 4.0 |
 | `Slave_NIBP_Send.ino` | Arduino firmware | CC BY-SA 4.0 |
 | `Slave_SKINTEMP_Sent` | Arduino firmware | CC BY-SA 4.0 |
-| `SPO2.ino` | Arduino firmware | CC BY-SA 4.0 |
+| `Slave_SPO2_Core.ino` | Arduino firmware | CC BY-SA 4.0 |
 | `Slave_HR_RR_MATLAB_E.m.txt` | MATLAB validation script | CC BY-SA 4.0 |
 | `3D PASMONT.f3z` | Fusion 360 3D-printing source | CC BY-SA 4.0 |
 | `PASMONT FIX.HMI` | Nextion HMI project | CC BY-SA 4.0 |
@@ -264,7 +296,7 @@ Full BOM with supplier links is included in the design-file repository. Notable 
 1. Flash the address-discovery sketch to each of the 5 slave units and to the master; read each 6-byte MAC address from the Arduino Serial Monitor.
 2. Enter the **master's** MAC address into `receiverAddress[]` inside each slave sketch.
 3. Enter each **slave's** MAC address into the master's `macSlaveECG[]`, `macSlaveHRRR[]`, `macSlaveNIBP[]`, `macSlaveSpO2[]` arrays.
-4. Flash `MASTER_core.ino` + `MASTER_datalogger.ino` to the master; flash each module-specific sketch to its slave.
+4. Flash `Master_Core.ino` + `Master_Datalogger.ino` to the master; flash each module-specific sketch to its slave.
 
 ### Hardware Assembly
 
@@ -274,12 +306,12 @@ Full BOM with supplier links is included in the design-file repository. Notable 
 
 ### Algorithm Validation (MATLAB)
 
-- `HR_RR_MATLAB_E.m.txt` imports a recorded ECG CSV, resamples to 250 Hz, applies Butterworth notch (50 Hz)/high-pass (0.5 Hz)/band-pass (5–15 Hz) filters (converted to numerically stable second-order-section/biquad form via `butter()` + `tf2sos()`), runs the Pan-Tompkins R-peak detection sequence, and extracts the EDR-AM respiration envelope — validating filter coefficients before they are transferred into `HR_RR.ino`.
+- `Slave_HR_RR_MATLAB_E.m.txt` imports a recorded ECG CSV, resamples to 250 Hz, applies Butterworth notch (50 Hz)/high-pass (0.5 Hz)/band-pass (5–15 Hz) filters (converted to numerically stable second-order-section/biquad form via `butter()` + `tf2sos()`), runs the Pan-Tompkins R-peak detection sequence, and extracts the EDR-AM respiration envelope — validating filter coefficients before they are transferred into `Slave_HR_RR.ino`.
 
 ### Nextion HMI Setup
 
-- Open the `.HMI` project in **Nextion Editor**, adjust layout as needed, compile to `.tft`, and upload via micro-SD or UART.
-- `MASTER_core.ino` addresses each Nextion component by its component ID (e.g., `txHR.txt=...`) — UI changes only require re-editing the Nextion project, not the firmware.
+- Open the `.HMI` project (`PASMONT FIX.HMI`) in **Nextion Editor**, adjust layout as needed, compile to `.tft`, and upload via micro-SD or UART.
+- `Master_Core.ino` addresses each Nextion component by its component ID (e.g., `txHR.txt=...`) — UI changes only require re-editing the Nextion project, not the firmware.
 
 ---
 
