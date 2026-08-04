@@ -1,3 +1,6 @@
+![alt text]([?raw=true](https://github.com/lonelyloli/Portable-Multi-Parameter-Patient-Monitor-Based-ON-ESP-NOW/blob/main/Documentation/Design%201.png))
+
+
 # Portable Multi-Parameter Patient Monitor Based on ESP-NOW
 
 A low-cost, open-hardware, portable patient monitor that simultaneously acquires **three-lead ECG**, **non-invasive blood pressure (NIBP)**, **SpO₂**, **skin temperature**, **heart rate (HR)**, and **respiration rate (RR)** — all coordinated wirelessly through Espressif's **ESP-NOW** protocol, without requiring a Wi-Fi access point or patient-side cabling between sensing and display units.
