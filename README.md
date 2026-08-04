@@ -118,96 +118,6 @@ The system uses a **two-tier, distributed sensor-network architecture**:
 
 Each ESP32 unit registers its communication peer's MAC address before any data exchange takes place, using a bidirectional registration scheme (master knows every slave's address; every slave knows the master's address).
 
-### Detailed Block Diagram
-
-The full signal path — from patient to the six ESP32 slave branches, through the ESP32 master, to the SD-card/cloud logger, and finally the Visual Basic desktop viewer — is shown below.
-
-```
-                              ┌───────────────────────────┐
-                              │       HUMAN (PATIENT)        │
-                              │  Manset · Electrodes ·        │
-                              │  Finger Clip · DS18B20 Probe  │
-                              └──────────────┬────────────────┘
-                                             │ sensors / cuff / electrodes
-                                             ▼
-┌───────────────────────────────────────────────────────────────────────────────────────┐
-│                                SLAVE MODULES (ESP32 / ESP32-S3)                            │
-│                                                                                             │
-│  ┌────────────────────┐  UART   ┌────────────────────┐   ┌───────────────────────────┐  │
-│  │   NIBP Slave          │◀──────▶│  Korotkoff Slave     │   │      ECG Slave (3-Lead)      │  │
-│  │   Manset→MPS3117→PSA  │        │  MAX4466 Mic→Filter  │   │  Electrode→Inst.Amp→Notch    │  │
-│  │   Valve/Pump Driver    │        │  →ADC (beat detect)  │   │  →HPF/LPF→Adder→Lead-Fail    │  │
-│  │      [ESP-32 SLAVE]     │        │      [ESP-32 SLAVE]    │   │         [ESP-32 SLAVE]         │  │
-│  └────────────────────┘        └────────────────────┘   └───────────────────────────┘  │
-│                                                                                             │
-│  ┌────────────────────────┐   ┌──────────────────────────────────┐                      │
-│  │   HR / RR Slave            │   │     SpO₂ / Skin-Temp / BMS Slave    │                      │
-│  │   ECG Lead II → Pan-       │   │  DS100A Nellcor→Demux→LPF/HPF        │                      │
-│  │   Tompkins → Heart Rate     │   │  DS18B20 → Temp | Battery→BMS/ADC     │                      │
-│  │   EDR-AM → HPF/LPF → RR      │   │              [ESP-32 SLAVE]              │                      │
-│  │         [ESP-32 SLAVE]        │   └──────────────────────────────────┘                      │
-│  └────────────────────────┘                                                                │
-└──────────────────────────────────────────────┬────────────────────────────────────────────┘
-                                                │   ESP-NOW (2.4 GHz, peer-to-peer, wireless)
-                                                ▼
-┌───────────────────────────────────────────────────────────────────────────────────────┐
-│                                  MASTER UNIT (ESP-32)                                      │
-│                                                                                             │
-│   ┌────────────────┐   ┌──────────┐   ┌─────────┐   ┌─────────────────────┐   ┌────────┐│
-│   │  Safety Alarm     │──▶│ LED Bar   │   │ Speaker  │   │ Nextion Display 10.1" │   │  Lead    ││
-│   │  (HR · RR · SpO₂)  │   └──────────┘   └─────────┘   │   (live waveforms &    │   │ Selector ││
-│   └────────────────┘                                    │    numeric values)      │   └────────┘│
-│                                                            └─────────────────────┘             │
-└───────────────────────────────────────────────┬─────────────────────────────────────────────┘
-                                                 │ UART
-                                                 ▼
-                                   ┌───────────────────────────┐
-                                   │      ESP-32 (GATEWAY)         │
-                                   │      SD Card ↔ Wi-Fi/HTTPS     │
-                                   └──────────────┬──────────────┘
-                                                  │
-                        ┌──────────────────────────┴──────────────────────────┐
-                        ▼                                                      ▼
-          ┌────────────────────────┐                          ┌───────────────────────────────┐
-          │        SD Card            │                          │        GOOGLE CLOUD               │
-          │  (local CSV backup,        │                          │  Apps Script  ───▶  Sheets API      │
-          │   time-stamped records)     │                          │     │                    │            │
-          └────────────────────────┘                          │     ▼                    ▼            │
-                                                                │ Spreadsheet          Drive             │
-                                                                └───────────────┬────────────────────────┘
-                                                                                │ Sheets API
-                                                                                ▼
-                                                                ┌───────────────────────────────┐
-                                                                │  Visual Basic Application (PC)    │
-                                                                │  Waveform review · zoom · pan ·     │
-                                                                │  export (PNG / PDF / CSV)            │
-                                                                └───────────────────────────────┘
-```
-
-<p align="center"><i>Detailed data-flow block diagram, adapted from Fig. 2 of the article: from patient-attached sensors, through the six ESP32 slave branches and the ESP-NOW wireless link, to the master's Nextion display and safety-alarm subsystem, and finally to the SD-card/cloud-based data logger reviewed offline via the Visual Basic desktop application.</i></p>
-
-For a high-level summary of just the wireless data flow, the simplified diagram below highlights the master-slave-logger-visualization chain:
-
-```
-        ┌────────────────────┐        ESP-NOW (2.4 GHz, P2P)        ┌─────────────────────┐
-        │   Slave Modules     │ ───────────────────────────────────▶ │   Master Modules      │
-        │  (ECG, HR/RR, NIBP, │ ◀─────────────────────────────────── │ (Nextion 10.1" HMI,   │
-        │  Korotkoff, SpO2/   │                                      │  Safety Alarm, SD     │
-        │  Temp/BMS)          │                                      │  Card Gateway)         │
-        └────────────────────┘                                      └──────────┬───────────┘
-                                                                                  │ Wi-Fi/HTTPS
-                                                                                  ▼
-                                                              ┌───────────────────────────────┐
-                                                              │ Google Sheets API / Apps Script │
-                                                              │ (Spreadsheet + Drive Logger)     │
-                                                              └───────────────┬───────────────┘
-                                                                              ▼
-                                                              ┌───────────────────────────────┐
-                                                              │ Visual Basic Desktop Application │
-                                                              │ (Offline Waveform Review, Export) │
-                                                              └───────────────────────────────┘
-```
-
 ### Inside the Enclosures
 
 <p align="center">
@@ -473,6 +383,7 @@ Signal-quality analysis showed the raw ECG SNR improving from −7.56 dB to 34.4
 - Suggested future improvements: accelerometer-based motion-artifact compensation for the ECG/EDR pipeline, and long-range wireless alternatives (Wi-Fi long-range mode, LoRa) to extend range and reliability for broader clinical deployment.
 
 ---
+
 ## Authors
 
 - I Gede Oka Pradnyananda Kusuma — Conceptualization, ECG analog front-end design, lead-selector/lead-fail-detector firmware
@@ -497,7 +408,7 @@ This hardware design and associated firmware/software are released under the **[
 
 If you use this design in your research, please cite the original article and the design-file repository:
 
-> I Gede Oka Pradnyananda Kusuma et al., "Portable Multi-Parameter Patient Monitor Based on ESP-NOW," Department of Medical Electronics Technology, Poltekkes Kemenkes Surabaya. Design files: DOI [10.17605/OSF.IO/ZMVT8](https://doi.org/10.17605/OSF.IO/ZMVT8).
+> I Gede Oka Pradnyananda Kusuma, I Putu Andika Budi Pratama, Muhammad Fa'izun Nuha, Risyad Dani Tri Wardana, Bambang Guruh Irianto, I Dewa Gede Hari Wisana, "Portable Multi-Parameter Patient Monitor Based on ESP-NOW," Department of Medical Electronics Technology, Poltekkes Kemenkes Surabaya. Design files: DOI [10.17605/OSF.IO/ZMVT8](https://doi.org/10.17605/OSF.IO/ZMVT8).
 
 ---
 
