@@ -473,7 +473,6 @@ Signal-quality analysis showed the raw ECG SNR improving from −7.56 dB to 34.4
 - Suggested future improvements: accelerometer-based motion-artifact compensation for the ECG/EDR pipeline, and long-range wireless alternatives (Wi-Fi long-range mode, LoRa) to extend range and reliability for broader clinical deployment.
 
 ---
-
 ## Authors
 
 - I Gede Oka Pradnyananda Kusuma — Conceptualization, ECG analog front-end design, lead-selector/lead-fail-detector firmware
