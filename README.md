@@ -408,7 +408,7 @@ This hardware design and associated firmware/software are released under the **[
 
 If you use this design in your research, please cite the original article and the design-file repository:
 
-> I Gede Oka Pradnyananda Kusuma et al., "Portable Multi-Parameter Patient Monitor Based on ESP-NOW," Department of Medical Electronics Technology, Poltekkes Kemenkes Surabaya. Design files: DOI [10.17605/OSF.IO/ZMVT8](https://doi.org/10.17605/OSF.IO/ZMVT8).
+> I Gede Oka Pradnyananda Kusuma, I Putu Andika Budi Pratama, Muhammad Fa'izun Nuha, Risyad Dani Tri Wardana, Bambang Guruh Irianto, I Dewa Gede Hari Wisana "Portable Multi-Parameter Patient Monitor Based on ESP-NOW," Department of Medical Electronics Technology, Poltekkes Kemenkes Surabaya. Design files: DOI [10.17605/OSF.IO/ZMVT8](https://doi.org/10.17605/OSF.IO/ZMVT8).
 
 ---
 
