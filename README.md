@@ -1,4 +1,4 @@
-![alt text]([?raw=true](https://github.com/lonelyloli/Portable-Multi-Parameter-Patient-Monitor-Based-ON-ESP-NOW/blob/main/Documentation/Design%201.png))
+![alt text]((https://github.com/lonelyloli/Portable-Multi-Parameter-Patient-Monitor-Based-ON-ESP-NOW/blob/main/Documentation/Design%201.png))
 
 
 # Portable Multi-Parameter Patient Monitor Based on ESP-NOW
