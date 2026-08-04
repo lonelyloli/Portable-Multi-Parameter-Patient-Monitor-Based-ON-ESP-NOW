@@ -178,13 +178,14 @@ All firmware was developed in the **Arduino IDE (v2.3.6)** with the ESP32 core, 
 
 | Sketch | Runs on | Role |
 |---|---|---|
-| `MASTER_core.ino` | ESP32 master | Registers slave MAC addresses as ESP-NOW peers, receives `struct_message` packets, updates the Nextion HMI, evaluates alarm thresholds |
-| `MASTER_datalogger.ino` | ESP32 master | Manages local SD-card CSV storage and uploads to the spreadsheet-based logger |
-| `ECG.ino` | ECG slave | Lead I/II acquisition, filtering, Lead III reconstruction, lead-fail detection |
-| `HR_RR.ino` | HR/RR slave | Pan-Tompkins QRS detection + EDR-AM respiration extraction |
-| `NIBP.ino` | NIBP slave | Oscillometric pump/valve control state machine |
-| `SkinTEMP_ESPNOW` | SpO₂/Temp/BMS slave | DS18B20 temperature acquisition |
-| `SPO2.ino` | SpO₂/Temp/BMS slave | Red/IR LED timing, demultiplexing, ratio-of-ratios SpO₂ computation |
+| `Master_Core.ino` | ESP32 master | Registers slave MAC addresses as ESP-NOW peers, receives `struct_message` packets, updates the Nextion HMI, evaluates alarm thresholds |
+| `Master_Datalogger.ino` | ESP32 master | Manages local SD-card CSV storage and uploads to the spreadsheet-based logger |
+| `Slave_ECG3Lead.ino` | ECG slave | Lead I/II acquisition, filtering, Lead III reconstruction, lead-fail detection |
+| `Slave_HR_RR.ino` | HR/RR slave | Pan-Tompkins QRS detection + EDR-AM respiration extraction |
+| `Slave_NIBP_Core.ino` | NIBP slave | Oscillometric pump/valve control state machine |
+| `Slave_NIBP_Send.ino` | NIBP slave | Send to Master machine |
+| `Slave_SKINTEMP_Sent` | SpO₂/Temp/BMS slave | DS18B20 temperature acquisition |
+| `Slave_SPO2_Core.ino` | SpO₂/Temp/BMS slave | Red/IR LED timing, demultiplexing, ratio-of-ratios SpO₂ computation |
 
 Key libraries: `esp_now.h`, `WiFi.h` (station mode, `WIFI_STA`), `freertos/task.h` & `freertos/queue.h` (ECG/HR-RR), `HardwareSerial` (NIBP/Korotkoff inter-slave UART + SD-card library on the gateway), `OneWire` and `DallasTemperature` (SpO₂/Temp/BMS branch).
 
@@ -205,17 +206,17 @@ Key libraries: `esp_now.h`, `WiFi.h` (station mode, `WIFI_STA`), `freertos/task.
 | File | Type | License |
 |---|---|---|
 | `PastMontFIX.sch` | Eagle schematic | CC BY-SA 4.0 |
-| `PastMontFIX.brd` | Eagle board/PCB | CC BY-SA 4.0 |
-| `MASTER_core.ino` | Arduino firmware | CC BY-SA 4.0 |
-| `MASTER_datalogger.ino` | Arduino firmware | CC BY-SA 4.0 |
-| `ECG.ino` | Arduino firmware | CC BY-SA 4.0 |
-| `HR_RR.ino` | Arduino firmware | CC BY-SA 4.0 |
-| `NIBP.ino` | Arduino firmware | CC BY-SA 4.0 |
-| `SkinTEMP_ESPNOW` | Arduino firmware | CC BY-SA 4.0 |
+| `Master_Core.ino` | Arduino firmware | CC BY-SA 4.0 |
+| `Master_Datalogger.ino` | Arduino firmware | CC BY-SA 4.0 |
+| `Slave_ECG3Lead.ino` | Arduino firmware | CC BY-SA 4.0 |
+| `Slave_HR_RR.ino` | Arduino firmware | CC BY-SA 4.0 |
+| `Slave_NIBP_Core.ino` | Arduino firmware | CC BY-SA 4.0 |
+| `Slave_NIBP_Send.ino` | Arduino firmware | CC BY-SA 4.0 |
+| `Slave_SKINTEMP_Sent` | Arduino firmware | CC BY-SA 4.0 |
 | `SPO2.ino` | Arduino firmware | CC BY-SA 4.0 |
-| `HR_RR_MATLAB_E.m.txt` | MATLAB validation script | CC BY-SA 4.0 |
-| `3D HARDWARE.f3z` | Fusion 360 3D-printing source | CC BY-SA 4.0 |
-| `HMI Nextion Editor File.HMI` | Nextion HMI project | CC BY-SA 4.0 |
+| `Slave_HR_RR_MATLAB_E.m.txt` | MATLAB validation script | CC BY-SA 4.0 |
+| `3D PASMONT.f3z` | Fusion 360 3D-printing source | CC BY-SA 4.0 |
+| `PASMONT FIX.HMI` | Nextion HMI project | CC BY-SA 4.0 |
 
 All files are archived at **DOI: [10.17605/OSF.IO/ZMVT8](https://doi.org/10.17605/OSF.IO/ZMVT8)**.
 
